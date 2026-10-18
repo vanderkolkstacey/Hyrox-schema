@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Hyrox</title>
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Hyrox">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#f4f4f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1012" media="(prefers-color-scheme: dark)">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar" id="topbar"><h1 id="paginaTitel">Vandaag</h1></header>
+
+  <main id="app" class="inhoud"></main>
+
+  <nav class="tabbalk" aria-label="Hoofdmenu">
+    <button class="tab" data-tab="vandaag"><span class="tab-ico">🏃</span><span>Vandaag</span></button>
+    <button class="tab" data-tab="week"><span class="tab-ico">📅</span><span>Week</span></button>
+    <button class="tab" data-tab="schema"><span class="tab-ico">🗂️</span><span>Schema</span></button>
+    <button class="tab" data-tab="voortgang"><span class="tab-ico">📈</span><span>Voortgang</span></button>
+    <button class="tab" data-tab="instellingen"><span class="tab-ico">⚙️</span><span>Instellingen</span></button>
+  </nav>
+
+  <div id="sheetLaag" class="sheet-laag" hidden>
+    <div class="sheet" role="dialog" aria-modal="true">
+      <div class="sheet-kop">
+        <h2 id="sheetTitel"></h2>
+        <button class="sheet-sluit" id="sheetSluit" aria-label="Sluiten">✕</button>
+      </div>
+      <div id="sheetInhoud" class="sheet-inhoud"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="schema.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

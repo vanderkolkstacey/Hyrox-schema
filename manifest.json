@@ -1,0 +1,16 @@
+{
+  "name": "Hyrox Rotterdam training",
+  "short_name": "Hyrox",
+  "description": "Persoonlijk trainingsschema voor Hyrox Duo Rotterdam, 3 april 2027",
+  "lang": "nl",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f1012",
+  "theme_color": "#0f1012",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
