@@ -36,7 +36,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #0f1012;
     --kaart: #1a1c1f;
     --kaart-2: #24272b;
@@ -58,6 +58,27 @@
     --rood: #ff5c5c;
   }
 }
+:root[data-theme="dark"] {
+    --bg: #0f1012;
+    --kaart: #1a1c1f;
+    --kaart-2: #24272b;
+    --tekst: #f2f2ef;
+    --tekst-2: #a1a5ab;
+    --rand: #2e3236;
+    --vandaag: #FFD600;
+
+    --c-kwaliteit: #ff7a4d;
+    --c-rustig: #3ccf82;
+    --c-compromised: #a685ff;
+    --c-kracht: #5c9bff;
+    --c-les: #ff6fb5;
+    --c-rust: #8b8f96;
+    --c-herstel: #3cc4d9;
+
+    --groen: #3ccf82;
+    --geel: #FFD600;
+    --rood: #ff5c5c;
+  }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html { -webkit-text-size-adjust: 100%; }
@@ -141,7 +162,7 @@ h1, h2, h3 { margin: 0; line-height: 1.2; }
 .type-kwaliteit { --c: var(--c-kwaliteit); }
 .type-rustig, .type-lang { --c: var(--c-rustig); }
 .type-compromised, .type-simulatie, .type-race { --c: var(--c-compromised); }
-.type-kracht-benen, .type-kracht-boven { --c: var(--c-kracht); }
+.type-kracht { --c: var(--c-kracht); }
 .type-les { --c: var(--c-les); }
 .type-rust { --c: var(--c-rust); }
 .type-label { background: color-mix(in srgb, var(--c) 16%, transparent); color: var(--c); }

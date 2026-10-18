@@ -9,15 +9,14 @@
 /* ---------- Constanten ---------- */
 const OPSLAG_SLEUTEL = 'hyrox-app';
 const DATA_VERSIE = 1;
-const APP_VERSIE = '1.0';
+const APP_VERSIE = '1.1';
 const DAGEN = ['ma', 'di', 'wo', 'do', 'vr', 'za', 'zo'];
 const DAGNAMEN = ['maandag', 'dinsdag', 'woensdag', 'donderdag', 'vrijdag', 'zaterdag', 'zondag'];
 const MAANDEN = ['jan', 'feb', 'mrt', 'apr', 'mei', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
 const LOOP_TYPES = ['kwaliteit', 'rustig', 'lang', 'compromised', 'simulatie', 'race'];
 const TYPE_NAAM = {
   kwaliteit: 'Kwaliteit', rustig: 'Rustig', lang: 'Lange loop', compromised: 'Compromised',
-  simulatie: 'Simulatie', race: 'Race', 'kracht-benen': 'Kracht benen',
-  'kracht-boven': 'Kracht bovenlichaam', les: 'Hyrox-les'
+  simulatie: 'Simulatie', race: 'Race', kracht: 'Kracht', les: 'Hyrox-les'
 };
 const SOORT_NAAM = { kort: 'Intervallen 200–400 m', 'lang-interval': 'Intervallen 1–2 km', tempo: 'Tempoloop' };
 const TEMPO_CATS = {
@@ -39,6 +38,8 @@ function legeStaat() {
     logs: {},           // 'kalenderweek|trainingId' → ingevulde gegevens
     aanpassingen: {},   // 'kalenderweek|trainingId' → gewijzigde velden (laag over de basis)
     extra: {},          // kalenderweek → extra trainingen
+    vast: [],           // wijzigingen van de vaste weekindeling (gelden vanaf een week)
+    verwijderd: {},     // 'kalenderweek|trainingId' → true: alleen in die week verwijderd
     laatsteBackup: null,
     testDatum: null
   };
@@ -200,6 +201,14 @@ function isHerstel(inhoud) { return !!SCHEMA_WEKEN[inhoud - 1].herstel; }
 function isLoop(t) { return LOOP_TYPES.includes(t.type); }
 function sleutel(cal, tid) { return cal + '|' + tid; }
 
+function krachtTraining(w, slot, dag, soort, extra) {
+  return {
+    tid: `w${w}-${slot}`, dag, type: 'kracht', krachtSoort: soort, km: 0,
+    titel: 'Kracht: ' + KRACHT_SOORTEN[soort].naam.toLowerCase(),
+    stappen: KRACHT_SOORTEN[soort].stappen.slice(), notities: [], ...extra
+  };
+}
+
 // De vaste weekindeling (sectie 8.1) plus de looptrainingen uit de weekdata.
 function basisTrainingen(w) {
   const wk = SCHEMA_WEKEN[w - 1];
@@ -212,26 +221,25 @@ function basisTrainingen(w) {
       soort: r.soort || null, km: r.km, doeltempo: r.doeltempo || null,
       titel: r.titel, stappen: r.stappen.slice(), simulatie: r.simulatie || null, notities: []
     };
-    if (r.type === 'kwaliteit' && w < 24) t.stappen.push('Optioneel: kort bovenlichaam erna (borst, schouders, armen)');
     if (r.type === 'compromised') t.notities.push('Donderdag volgt op de Hyrox-les: waren je benen woensdag erg zwaar belast, loop het compromised-deel dan rustiger of maak er een rustige loop van.');
-    if (w === 11 && r.type === 'kwaliteit') t.notities.push('Deze week staat de kwaliteitsloop op dinsdag 29 december en de beentraining op maandag. Schuiven mag, zolang de regels kloppen. Let op: zo valt de kwaliteitsloop op de dag na de beentraining. Houd de beentraining maandag dan wat lichter, of schuif een van beide.');
+    if (w === 11 && r.type === 'kwaliteit') t.notities.push('Deze week staat de kwaliteitsloop op dinsdag 29 december. De beentraining blijft op dinsdag, maar ná het lopen: eerst lopen, dan benen.');
     lijst.push(t);
   });
 
   if (w !== 24) {
-    const licht = w === 23;
-    lijst.push({
-      tid: `w${w}-kracht-benen`, dag: w === 11 ? 0 : 1, type: 'kracht-benen', km: 0,
-      titel: licht ? 'Kracht benen (licht)' : 'Kracht benen (zwaar)',
-      stappen: [
-        licht ? 'Kracht benen licht: minder gewicht en minder sets dan normaal'
-          : herstel ? 'Kracht benen zwaar, maar met iets minder gewicht of minder sets (herstelweek)'
-            : 'Kracht benen zwaar',
-        'Knie- en heupoefeningen (±10 min, 2× 12–15 herhalingen):',
-        ...KNIE_HEUP_OEFENINGEN
-      ],
-      notities: w === 11 ? ['Deze week op maandag, omdat de kwaliteitsloop op dinsdag staat.'] : []
-    });
+    const herstelStap = herstel ? ['Herstelweek: iets minder gewicht of minder sets'] : [];
+    const lichtStap = w === 23 ? ['Licht: minder gewicht en minder sets dan normaal'] : [];
+    lijst.push(krachtTraining(w, 'kracht-boven', 0, 'bovenlichaam', {
+      titel: 'Kracht 1: bovenlichaam',
+      stappen: ['Na de loop', ...KRACHT_SOORTEN.bovenlichaam.stappen, ...herstelStap],
+      notities: w === 11 ? ['Deze week staat de kwaliteitsloop op dinsdag. Doe het bovenlichaam op maandag, of op dinsdag na de benen.'] : []
+    }));
+    const benen = w === 23 ? 'benen-licht' : 'benen-zwaar';
+    lijst.push(krachtTraining(w, 'kracht-benen', 1, benen, {
+      titel: w === 23 ? 'Kracht 2: benen licht' : 'Kracht 2: benen zwaar',
+      stappen: [...(w === 11 ? ['Ná de kwaliteitsloop'] : []), ...KRACHT_SOORTEN[benen].stappen, ...herstelStap],
+      notities: w === 11 ? ['Zet de beentraining niet op maandag: dan vallen de intervallen op de dag na zware benen.'] : []
+    }));
     const lesRustig = herstel || w === 21 || w === 23;
     lijst.push({
       tid: `w${w}-les`, dag: 2, type: 'les', km: 0,
@@ -239,22 +247,38 @@ function basisTrainingen(w) {
       stappen: ['Hyrox-les volgen', ...(lesRustig ? ['Doe het deze week rustiger aan'] : [])],
       notities: ['De kilometers die je in de Hyrox-les loopt tellen niet mee in het schema.']
     });
-    lijst.push({
-      tid: `w${w}-kracht-boven`, dag: 4, type: 'kracht-boven', km: 0,
-      titel: 'Kracht bovenlichaam',
-      stappen: ['Borst, schouders en armen', ...(herstel ? ['Herstelweek: iets minder gewicht of minder sets'] : [])],
-      notities: []
-    });
+    lijst.push(krachtTraining(w, 'kracht-zo', 6, 'boven-core', {
+      titel: w === 23 ? 'Kracht 3: bovenlichaam + core (licht)' : 'Kracht 3: bovenlichaam + core',
+      stappen: [...KRACHT_SOORTEN['boven-core'].stappen, ...herstelStap, ...lichtStap],
+      notities: ['Geen zware benen op zondag: maandag is de kwaliteitsloop.']
+    }));
   }
   return lijst;
 }
 
-const TYPE_VOLGORDE = ['kwaliteit', 'rustig', 'lang', 'compromised', 'simulatie', 'race', 'kracht-benen', 'les', 'kracht-boven'];
+const TYPE_VOLGORDE = ['kwaliteit', 'rustig', 'lang', 'compromised', 'simulatie', 'race', 'kracht', 'les'];
+
+// Het deel van de training-id zonder weeknummer, bijv. 'kracht-zo'. Zo herkennen we
+// dezelfde training in elke week, ook als een week herhaald is.
+function slotVan(tid) { return tid.replace(/^w\d+-/, ''); }
+
+// Basis + wijzigingen van je vaste weekindeling (die gelden vanaf een bepaalde kalenderweek).
+function vasteTrainingen(cal) {
+  const inhoud = inhoudVan(cal);
+  let lijst = basisTrainingen(inhoud);
+  (S.vast || []).filter(v => v.vanaf <= cal).forEach(v => {
+    if (v.actie === 'toevoegen') { if (inhoud !== 24) lijst.push(kloon(v.training)); }
+    else if (v.actie === 'wijzigen') lijst = lijst.map(t => slotVan(t.tid) === v.slot ? { ...t, ...kloon(v.velden) } : t);
+    else if (v.actie === 'verwijderen') lijst = lijst.filter(t => slotVan(t.tid) !== v.slot);
+  });
+  return lijst;
+}
 
 // Alle trainingen van een kalenderweek, mét aanpassingen en extra trainingen.
 function trainingenVanWeek(cal) {
   const inhoud = inhoudVan(cal);
-  const ruw = basisTrainingen(inhoud).concat((S.extra[cal] || []).map(t => ({ ...kloon(t), extra: true })));
+  const ruw = vasteTrainingen(cal).concat((S.extra[cal] || []).map(t => ({ ...kloon(t), extra: true })))
+    .filter(t => !S.verwijderd[sleutel(cal, t.tid)]);
   return ruw.map(t => {
     const key = sleutel(cal, t.tid);
     const a = S.aanpassingen[key];
@@ -269,7 +293,7 @@ function vindTraining(key) {
 
 function basisVan(t) {
   if (t.extra) return kloon((S.extra[t.cal] || []).find(x => x.tid === t.tid) || {});
-  return basisTrainingen(t.inhoud).find(x => x.tid === t.tid) || {};
+  return vasteTrainingen(t.cal).find(x => x.tid === t.tid) || {};
 }
 
 // Sla wijzigingen op als laag; velden die gelijk zijn aan het origineel vervallen.
@@ -381,9 +405,14 @@ function gaNaar(tab, week) {
 }
 
 /* ---------- Training-kaart ---------- */
+function typeNaam(t) {
+  if (t.type === 'kracht') return 'Kracht · ' + (t.krachtSoort === 'eigen' ? 'eigen' : (KRACHT_SOORTEN[t.krachtSoort] || { naam: '' }).naam);
+  return TYPE_NAAM[t.type] || t.type;
+}
+
 function typeLabel(t) {
   const sub = t.type === 'kwaliteit' && t.soort ? ` · ${SOORT_NAAM[t.soort]}` : '';
-  return `<span class="label type-label type-${t.type}">${esc(TYPE_NAAM[t.type] || t.type)}${sub}</span>`;
+  return `<span class="label type-label type-${t.type}">${esc(typeNaam(t))}${sub}</span>`;
 }
 
 function logSamenvatting(t) {
@@ -423,7 +452,7 @@ function trainingKaart(t, opties = {}) {
       <button class="knop klein" data-actie="verplaats-kies-dag" data-key="${esc(t.key)}">↔️ Verplaatsen</button>
       <button class="knop klein" data-actie="bewerk" data-key="${esc(t.key)}">✏️ Bewerken</button>
       ${t.aangepast ? `<button class="knop klein" data-actie="herstel-origineel" data-key="${esc(t.key)}">↩️ Herstel origineel</button>` : ''}
-      ${t.extra ? `<button class="knop klein gevaar" data-actie="extra-verwijder" data-key="${esc(t.key)}">🗑️ Verwijderen</button>` : ''}
+      ${t.extra || t.type === 'kracht' ? `<button class="knop klein gevaar" data-actie="verwijder" data-key="${esc(t.key)}">🗑️ Verwijderen</button>` : ''}
     </div>` : '';
   return `
     <div class="${opties.zonderKaart ? '' : 'kaart '}training type-${t.type}">
@@ -524,7 +553,7 @@ function renderVandaag() {
         <div class="training-titel">Rustdag 😴</div>
         <p class="subtiel">Vandaag staat er niets op het schema. Herstellen hoort bij trainen.</p>
         <h3>Morgen</h3>
-        ${morgen.length ? morgen.map(t => `<div class="item type-${t.type}" data-actie="detail" data-key="${esc(t.key)}"><span class="item-tekst"><b>${esc(t.titel)}</b><span>${esc(TYPE_NAAM[t.type])}</span></span>${isLoop(t) ? `<span class="item-km">${fmtKm(t.km)} km</span>` : ''}</div>`).join('') : '<p class="subtiel">Morgen is ook een rustdag.</p>'}
+        ${morgen.length ? morgen.map(t => `<div class="item type-${t.type}" data-actie="detail" data-key="${esc(t.key)}"><span class="item-tekst"><b>${esc(t.titel)}</b><span>${esc(typeNaam(t))}</span></span>${isLoop(t) ? `<span class="item-km">${fmtKm(t.km)} km</span>` : ''}</div>`).join('') : '<p class="subtiel">Morgen is ook een rustdag.</p>'}
       </div>`;
   }
 
@@ -576,7 +605,7 @@ function renderWeek() {
           ${items.length ? items.map(t => `
             <button class="item type-${t.type}" data-actie="detail" data-key="${esc(t.key)}">
               <span class="item-status">${STATUS_ICOON[statusVan(t)]}</span>
-              <span class="item-tekst"><b>${esc(t.titel)}</b><span>${esc(TYPE_NAAM[t.type])}${t.aangepast ? ' · aangepast' : ''}</span></span>
+              <span class="item-tekst"><b>${esc(t.titel)}</b><span>${esc(typeNaam(t))}${t.aangepast ? ' · aangepast' : ''}</span></span>
               ${isLoop(t) ? `<span class="item-km">${fmtKm(t.km)} km</span>` : ''}
             </button>`).join('') : '<div class="rust-tekst">Rust 😴</div>'}
         </div>
@@ -590,7 +619,9 @@ function renderWeek() {
       <button class="knop" data-actie="kies-training" data-doel="bewerk">✏️ Training bewerken</button>
       <button class="knop" data-actie="herhaal" data-cal="${cal}">🔁 Week herhalen</button>
       <button class="knop" data-actie="ziek" data-cal="${cal}">🤒 Week ziek/gemist</button>
-      <button class="knop" data-actie="extra-nieuw" data-cal="${cal}">➕ Extra loop</button>
+      <button class="knop" data-actie="extra-nieuw" data-cal="${cal}">➕ Training toevoegen</button>
+      <button class="knop" data-actie="vaste-indeling">🗓️ Vaste weekindeling</button>
+      ${Object.keys(S.verwijderd).some(k => k.startsWith(cal + '|')) ? `<button class="knop" data-actie="herstel-verwijderd" data-cal="${cal}">↩️ Verwijderde terugzetten</button>` : ''}
       ${S.historie.length ? '<button class="knop" data-actie="ongedaan">↶ Ongedaan maken</button>' : ''}
     </div>`;
 
@@ -636,6 +667,7 @@ function renderSchema() {
     <div class="knoppen">
       <button class="knop" data-actie="uitgangspunten">📋 Uitgangspunten & regels</button>
       <button class="knop" data-actie="zones">🎯 Tempo-zones</button>
+      <button class="knop" data-actie="vaste-indeling">🗓️ Vaste weekindeling</button>
       ${S.historie.length ? '<button class="knop" data-actie="ongedaan">↶ Ongedaan maken</button>' : ''}
     </div>`;
   Object.entries(FASES).forEach(([n, f]) => {
@@ -669,7 +701,7 @@ function uitgangspuntenHTML() {
     <ul class="lijst">${UITGANGSPUNTEN.map(u => `<li>${esc(u)}</li>`).join('')}</ul>
     <h3 class="mt">Waarschuwingen in de app</h3>
     <ul class="lijst">
-      <li>Verplaatsen: twee zware looptrainingen (kwaliteit, compromised/simulatie vanaf week 9, lange loop) op opeenvolgende dagen, of intervallen/tempoloop op de dag na zware beentraining.</li>
+      <li>Verplaatsen of toevoegen: twee zware looptrainingen (kwaliteit, compromised/simulatie vanaf week 9, lange loop) op opeenvolgende dagen, intervallen/tempoloop op de dag na Benen zwaar (dus ook nooit Benen zwaar op zondag), of iets op vrijdag, je vaste rustdag.</li>
       <li>Bewerken: weektotaal meer dan 10% boven de zwaarste week tot dan toe, een weektotaal boven 26 km, of één loop boven 11 km.</li>
       <li>Knie: ${esc(KNIE_REGEL)}</li>
       <li>Week gemist of ziek geweest? Niet inhalen; begin weer bij de laatste week die goed ging.</li>
@@ -706,7 +738,7 @@ function openAfvinken(key) {
   formulier = { t, f, auto: null };
   const km = l.km ?? (t.km || '');
   let html = `
-    <div class="subtiel">${esc(fmtDatum(weekDagNr(t.cal, t.dag), true))} · week ${t.cal} · ${esc(TYPE_NAAM[t.type])}</div>
+    <div class="subtiel">${esc(fmtDatum(weekDagNr(t.cal, t.dag), true))} · week ${t.cal} · ${esc(typeNaam(t))}</div>
     <div class="veld"><span class="veld-label">Status</span>
       <div class="segment" data-groep="status">
         ${['gedaan', 'overgeslagen', 'open'].map(s => `<button data-actie="f-kies" data-veld="status" data-w="${s}" class="${f.status === s ? 'aan' : ''}">${STATUS_ICOON[s]} ${s === 'open' ? 'Nog te doen' : s[0].toUpperCase() + s.slice(1)}</button>`).join('')}
@@ -743,7 +775,7 @@ function openAfvinken(key) {
         </div>
       </div>
       <div class="veld"><label for="fNotitie">Hoe ging het?</label><textarea id="fNotitie" placeholder="Bijv. benen zwaar na de les, laatste interval lastig…">${esc(l.notitie || '')}</textarea></div>`;
-  } else if (t.type === 'kracht-benen' || t.type === 'kracht-boven') {
+  } else if (t.type === 'kracht') {
     html += `<div class="veld"><label for="fNotitie">Wat heb je gedaan? (korte notitie)</label><textarea id="fNotitie" placeholder="Bijv. squats, lunges, step-downs…">${esc(l.notitie || '')}</textarea></div>`;
   } else {
     html += `<p class="subtiel mt">Alleen afvinken is genoeg.</p>`;
@@ -866,7 +898,7 @@ function formOpslaan() {
 function isZwaar(t) {
   return ['kwaliteit', 'lang', 'simulatie', 'race'].includes(t.type) || (t.type === 'compromised' && t.inhoud >= 9);
 }
-function isZwareBenen(t) { return t.type === 'kracht-benen' && t.inhoud !== 23; }
+function isZwareBenen(t) { return t.type === 'kracht' && t.krachtSoort === 'benen-zwaar'; }
 
 function regelWaarschuwingen(cal, lijst) {
   const items = [];
@@ -888,6 +920,9 @@ function regelWaarschuwingen(cal, lijst) {
     items.filter(i => i.t.type === 'kwaliteit' && i.nr - b.nr === 1).forEach(k => {
       w.push(`Intervallen of tempoloop op de dag na zware beentraining: ${naam(k)} na ${naam(b)}.`);
     });
+  });
+  items.filter(i => i.nr === weekDagNr(cal, 4)).forEach(i => {
+    w.push(`Vrijdag is je vaste rustdag: ${i.t.titel} staat op vrijdag. Weet je het zeker?`);
   });
   return w;
 }
@@ -918,7 +953,7 @@ function openKiesTraining(doel) {
   openSheet(doel === 'verplaats' ? 'Welke training verplaatsen?' : 'Welke training bewerken?',
     lijst.map(t => `
       <button class="keuze" data-actie="${doel === 'verplaats' ? 'verplaats-kies-dag' : 'bewerk'}" data-key="${esc(t.key)}">
-        <span><b>${esc(t.titel)}</b><br><span class="subtiel klein">${esc(DAGNAMEN[t.dag])} · ${esc(TYPE_NAAM[t.type])}</span></span>
+        <span><b>${esc(t.titel)}</b><br><span class="subtiel klein">${esc(DAGNAMEN[t.dag])} · ${esc(typeNaam(t))}</span></span>
         <span>${isLoop(t) ? fmtKm(t.km) + ' km' : ''}</span>
       </button>`).join(''));
 }
@@ -956,29 +991,70 @@ function verplaatsNaar(key, dag, bevestigd) {
 }
 
 /* ---------- Bewerken ---------- */
+function krachtSoortOpties(gekozen) {
+  return Object.entries(KRACHT_SOORTEN).map(([k, v]) => `<option value="${k}" ${k === gekozen ? 'selected' : ''}>${esc(v.naam)}</option>`).join('');
+}
+function krachtTitel(soort, eigenNaam) {
+  return soort === 'eigen' ? (eigenNaam || 'Eigen krachttraining') : 'Kracht: ' + KRACHT_SOORTEN[soort].naam.toLowerCase();
+}
+// Keuze "alleen deze week" of "vaste weekindeling vanaf deze week".
+function scopeHTML(cal, standaard = 'week') {
+  return `<div class="veld"><span class="veld-label">Geldt voor</span>
+    <div class="segment" id="scope">
+      <button data-actie="kies-scope" data-w="week" class="${standaard === 'week' ? 'aan' : ''}">Alleen week ${cal}</button>
+      <button data-actie="kies-scope" data-w="vast" class="${standaard === 'vast' ? 'aan' : ''}">Vaste indeling vanaf week ${cal}</button>
+    </div>
+    <div class="hint">Vaste indeling = ook voor alle weken daarna.</div></div>`;
+}
+function gekozenScope() {
+  const b = document.querySelector('#scope .aan');
+  return b ? b.dataset.w : 'week';
+}
+function vastToevoegen(v) {
+  S.vast.push({ id: Date.now(), ...kloon(v) });
+}
+
 function openBewerk(key) {
   const t = vindTraining(key);
   const loop = isLoop(t);
+  const kracht = t.type === 'kracht';
   openSheet('Training bewerken', `
     <div class="subtiel">${esc(DAGNAMEN[t.dag])} ${esc(fmtDatum(weekDagNr(t.cal, t.dag)))} · week ${t.cal}</div>
-    <div class="veld"><label for="bTitel">Titel</label><input type="text" id="bTitel" value="${esc(t.titel)}"></div>
+    ${kracht ? `
+      <div class="veld"><label for="bSoort">Soort krachttraining</label><select id="bSoort">${krachtSoortOpties(t.krachtSoort)}</select></div>
+      <div class="veld" id="bEigenVeld" ${t.krachtSoort === 'eigen' ? '' : 'hidden'}><label for="bEigen">Naam</label><input type="text" id="bEigen" value="${t.krachtSoort === 'eigen' ? esc(t.titel) : ''}" placeholder="bijv. Mobiliteit"></div>`
+    : `<div class="veld"><label for="bTitel">Titel</label><input type="text" id="bTitel" value="${esc(t.titel)}"></div>`}
     ${loop ? `
       <div class="veld"><label for="bKm">Afstand (km)</label><input type="text" inputmode="decimal" id="bKm" value="${esc(t.km ? fmtKm(t.km) : '')}"></div>
       <div class="veld"><label for="bDoel">Doeltempo (min/km, mag leeg)</label><input type="text" inputmode="decimal" id="bDoel" value="${esc(t.doeltempo || '')}" placeholder="bijv. 5:05"></div>` : ''}
     <div class="veld"><label for="bOmschr">Omschrijving (extra uitleg)</label><textarea id="bOmschr">${esc(t.omschrijving || '')}</textarea></div>
     <div class="veld"><label for="bStappen">Stappen (één stap per regel)</label><textarea id="bStappen" style="min-height:150px">${esc((t.stappen || []).join('\n'))}</textarea></div>
+    ${kracht && !t.extra ? scopeHTML(t.cal) : ''}
     <div id="bWaarsch"></div>
     <button class="knop primair groot breed mt" data-actie="bewerk-opslaan" data-key="${esc(key)}">Opslaan</button>
     ${t.aangepast ? `<button class="knop breed mt" data-actie="herstel-origineel" data-key="${esc(key)}">↩️ Herstel origineel</button>` : ''}`);
 }
 
+function toonWaarschuwing(doel, lijst, knopHTML) {
+  $(doel).innerHTML = waarschuwingHTML(lijst) + `<p class="subtiel">Dit is een waarschuwing, geen verbod.</p>` + knopHTML;
+  $(doel).scrollIntoView({ behavior: 'smooth' });
+}
+
 function bewerkOpslaan(key, bevestigd) {
   const t = vindTraining(key);
   const w = {
-    titel: $('#bTitel').value.trim() || t.titel,
     stappen: $('#bStappen').value.split('\n').map(s => s.trim()).filter(Boolean),
     omschrijving: $('#bOmschr').value.trim() || null
   };
+  const knop = `<button class="knop breed" data-actie="bewerk-opslaan" data-key="${esc(key)}" data-bevestigd="1">Toch opslaan</button>`;
+  if (t.type === 'kracht') {
+    const soort = $('#bSoort').value;
+    w.krachtSoort = soort;
+    w.titel = soort === 'eigen' ? ($('#bEigen').value.trim() || t.titel) : (soort === t.krachtSoort ? t.titel : krachtTitel(soort));
+  } else {
+    w.titel = $('#bTitel').value.trim() || t.titel;
+  }
+  const nieuwT = { ...t, ...w };
   if (isLoop(t)) {
     const kmTekst = $('#bKm').value.trim();
     const km = parseKm(kmTekst);
@@ -987,25 +1063,30 @@ function bewerkOpslaan(key, bevestigd) {
     const doel = $('#bDoel').value.trim().replace(/\./g, ':').replace(/-/g, '–');
     if (doel && !doeltempoSec(doel)) { toast('Doeltempo niet herkend. Gebruik bijv. 5:05'); return; }
     w.doeltempo = doel || null;
+    Object.assign(nieuwT, w);
     if (!bevestigd) {
-      const nieuwT = { ...t, ...w };
       const lijst = trainingenVanWeek(t.cal).map(x => x.key === key ? nieuwT : x);
       const oud = kmWaarschuwingen(t.cal, trainingenVanWeek(t.cal), t);
       const extra = kmWaarschuwingen(t.cal, lijst, nieuwT).filter(x => !oud.includes(x) || nieuwT.km > t.km);
-      if (extra.length) {
-        $('#bWaarsch').innerHTML = waarschuwingHTML(extra) + `
-          <p class="subtiel">Dit is een waarschuwing, geen verbod.</p>
-          <button class="knop breed" data-actie="bewerk-opslaan" data-key="${esc(key)}" data-bevestigd="1">Toch opslaan</button>`;
-        $('#bWaarsch').scrollIntoView({ behavior: 'smooth' });
-        return;
-      }
+      if (extra.length) { toonWaarschuwing('#bWaarsch', extra, knop); return; }
     }
+  } else if (!bevestigd) {
+    const huidig = trainingenVanWeek(t.cal);
+    const oud = regelWaarschuwingen(t.cal, huidig);
+    const extra = regelWaarschuwingen(t.cal, huidig.map(x => x.key === key ? nieuwT : x)).filter(x => !oud.includes(x));
+    if (extra.length) { toonWaarschuwing('#bWaarsch', extra, knop); return; }
   }
-  zetAanpassing(t, w);
+  if (t.type === 'kracht' && !t.extra && gekozenScope() === 'vast') {
+    vastToevoegen({ vanaf: t.cal, actie: 'wijzigen', slot: slotVan(t.tid), velden: w, wat: `${t.titel} → ${w.titel}` });
+    delete S.aanpassingen[t.key];
+    toast(`Vaste indeling aangepast vanaf week ${t.cal}`);
+  } else {
+    zetAanpassing(t, w);
+    toast('Training aangepast');
+  }
   bewaar();
   sluitSheet();
   render();
-  toast('Training aangepast');
 }
 
 function herstelOrigineel(key) {
@@ -1016,46 +1097,145 @@ function herstelOrigineel(key) {
   toast('Origineel hersteld');
 }
 
-/* ---------- Extra loop ---------- */
-function openExtra(cal) {
-  openSheet('Extra loop toevoegen', `
+/* ---------- Training toevoegen (loop of kracht) ---------- */
+function openExtra(cal, opties = {}) {
+  const kracht = !!opties.kracht;
+  openSheet(kracht ? 'Krachttraining toevoegen' : 'Training toevoegen', `
     <p class="subtiel">Week ${cal} · ${esc(weekBereik(cal))}</p>
     <div class="veld"><label for="xType">Soort</label>
       <select id="xType">
-        <option value="rustig">Rustig</option><option value="lang">Lange loop</option>
-        <option value="kwaliteit">Kwaliteit (intervallen)</option><option value="compromised">Compromised</option>
+        <optgroup label="Loop">
+          <option value="rustig">Rustig</option><option value="lang">Lange loop</option>
+          <option value="kwaliteit">Kwaliteit (intervallen)</option><option value="compromised">Compromised</option>
+        </optgroup>
+        <optgroup label="Kracht">
+          ${Object.entries(KRACHT_SOORTEN).map(([k, v]) => `<option value="kracht:${k}" ${kracht && k === 'core' ? 'selected' : ''}>Kracht: ${esc(v.naam)}</option>`).join('')}
+        </optgroup>
       </select></div>
+    <div class="veld" id="xEigenVeld" hidden><label for="xEigen">Naam</label><input type="text" id="xEigen" placeholder="bijv. Mobiliteit"></div>
     <div class="veld"><label for="xDag">Dag</label>
-      <select id="xDag">${DAGNAMEN.map((d, i) => `<option value="${i}">${d} ${esc(fmtDatum(weekDagNr(cal, i)))}</option>`).join('')}</select></div>
-    <div class="veld"><label for="xKm">Afstand (km)</label><input type="text" inputmode="decimal" id="xKm" placeholder="bijv. 4"></div>
-    <div class="veld"><label for="xTitel">Titel</label><input type="text" id="xTitel" placeholder="bijv. Extra rustig loopje"></div>
+      <select id="xDag">${DAGNAMEN.map((d, i) => `<option value="${i}" ${i === (opties.dag ?? 6) ? 'selected' : ''}>${d} ${esc(fmtDatum(weekDagNr(cal, i)))}</option>`).join('')}</select></div>
+    <div class="veld" id="xKmVeld" ${kracht ? 'hidden' : ''}><label for="xKm">Afstand (km)</label><input type="text" inputmode="decimal" id="xKm" placeholder="bijv. 4"></div>
+    <div class="veld"><label for="xTitel">Titel (mag leeg)</label><input type="text" id="xTitel" placeholder="bijv. Extra rustig loopje"></div>
+    <div id="xScopeVeld" ${kracht ? '' : 'hidden'}>${scopeHTML(cal, opties.vast ? 'vast' : 'week')}</div>
     <div id="xWaarsch"></div>
     <button class="knop primair groot breed mt" data-actie="extra-opslaan" data-cal="${cal}">Toevoegen</button>`);
 }
 
+function extraTypeGewijzigd() {
+  const v = $('#xType').value;
+  const kracht = v.startsWith('kracht:');
+  $('#xKmVeld').hidden = kracht;
+  $('#xScopeVeld').hidden = !kracht;
+  $('#xEigenVeld').hidden = v !== 'kracht:eigen';
+}
+
 function extraOpslaan(cal, bevestigd) {
-  const type = $('#xType').value;
-  const km = parseKm($('#xKm').value) || 0;
-  const t = {
-    tid: 'x' + Date.now(), dag: +$('#xDag').value, type, soort: type === 'kwaliteit' ? 'kort' : null,
-    km, doeltempo: null, titel: $('#xTitel').value.trim() || `Extra: ${TYPE_NAAM[type].toLowerCase()}${km ? ' ' + fmtKm(km) + ' km' : ''}`,
-    stappen: [], notities: []
-  };
+  const v = $('#xType').value;
+  const dag = +$('#xDag').value;
+  const titel = $('#xTitel').value.trim();
+  const kracht = v.startsWith('kracht:');
+  const vast = kracht && gekozenScope() === 'vast';
+  let t;
+  if (kracht) {
+    const soort = v.slice(7);
+    t = {
+      tid: (vast ? 'v' : 'x') + Date.now(), dag, type: 'kracht', krachtSoort: soort, km: 0,
+      titel: titel || krachtTitel(soort, $('#xEigen').value.trim()),
+      stappen: KRACHT_SOORTEN[soort].stappen.slice(), notities: []
+    };
+  } else {
+    const km = parseKm($('#xKm').value) || 0;
+    t = {
+      tid: 'x' + Date.now(), dag, type: v, soort: v === 'kwaliteit' ? 'kort' : null,
+      km, doeltempo: null, titel: titel || `Extra: ${TYPE_NAAM[v].toLowerCase()}${km ? ' ' + fmtKm(km) + ' km' : ''}`,
+      stappen: [], notities: []
+    };
+  }
   if (!bevestigd) {
     const nieuw = { ...t, key: sleutel(cal, t.tid), cal, inhoud: inhoudVan(cal) };
     const huidig = trainingenVanWeek(cal);
     const lijst = huidig.concat([nieuw]);
-    const w = kmWaarschuwingen(cal, lijst, nieuw).concat(regelWaarschuwingen(cal, lijst).filter(x => !regelWaarschuwingen(cal, huidig).includes(x)));
+    const w = (kracht ? [] : kmWaarschuwingen(cal, lijst, nieuw))
+      .concat(regelWaarschuwingen(cal, lijst).filter(x => !regelWaarschuwingen(cal, huidig).includes(x)));
     if (w.length) {
-      $('#xWaarsch').innerHTML = waarschuwingHTML(w) + `<button class="knop breed mt" data-actie="extra-opslaan" data-cal="${cal}" data-bevestigd="1">Toch toevoegen</button>`;
+      toonWaarschuwing('#xWaarsch', w, `<button class="knop breed mt" data-actie="extra-opslaan" data-cal="${cal}" data-bevestigd="1">Toch toevoegen</button>`);
       return;
     }
   }
-  (S.extra[cal] = S.extra[cal] || []).push(t);
+  if (vast) {
+    vastToevoegen({ vanaf: cal, actie: 'toevoegen', training: t, wat: `${t.titel} op ${DAGNAMEN[dag]} toegevoegd` });
+    toast(`Toegevoegd aan je vaste indeling vanaf week ${cal}`);
+  } else {
+    (S.extra[cal] = S.extra[cal] || []).push(t);
+    toast('Training toegevoegd');
+  }
   bewaar();
   sluitSheet();
   render();
-  toast('Extra loop toegevoegd');
+}
+
+/* ---------- Verwijderen en vaste weekindeling ---------- */
+function openVerwijder(key) {
+  const t = vindTraining(key);
+  if (t.extra) { extraVerwijder(key); return; }
+  openSheet('Training verwijderen', `
+    <p><b>${esc(t.titel)}</b><br><span class="subtiel">${esc(DAGNAMEN[t.dag])} · week ${t.cal}</span></p>
+    <button class="knop groot breed" data-actie="verwijder-week" data-key="${esc(key)}">Alleen in week ${t.cal}</button>
+    <button class="knop gevaar groot breed mt" data-actie="verwijder-vast" data-key="${esc(key)}">Uit vaste indeling (vanaf week ${t.cal})</button>
+    <p class="subtiel klein mt">Je kunt dit later terugzetten: in de week zelf, of via Schema → Vaste weekindeling.</p>`);
+}
+
+function verwijderWeek(key) {
+  S.verwijderd[key] = true;
+  bewaar();
+  sluitSheet();
+  render();
+  toast('Verwijderd uit deze week');
+}
+
+function verwijderVast(key) {
+  const t = vindTraining(key);
+  vastToevoegen({ vanaf: t.cal, actie: 'verwijderen', slot: slotVan(t.tid), wat: `${t.titel} (${DAGNAMEN[t.dag]}) verwijderd` });
+  bewaar();
+  sluitSheet();
+  render();
+  toast(`Verwijderd uit je vaste indeling vanaf week ${t.cal}`);
+}
+
+function herstelVerwijderd(cal) {
+  Object.keys(S.verwijderd).filter(k => k.startsWith(cal + '|')).forEach(k => delete S.verwijderd[k]);
+  bewaar();
+  render();
+  toast('Teruggezet');
+}
+
+function openVasteIndeling() {
+  const cal = ui.tab === 'week' && ui.week ? ui.week : huidigeWeek();
+  const lijst = vasteTrainingen(cal);
+  const dagen = DAGNAMEN.map((naam, d) => {
+    const items = lijst.filter(t => t.dag === d);
+    return `<div class="vergelijk"><span><b>${naam}</b></span><span style="text-align:right">${items.length ? items.map(t => esc(t.titel)).join('<br>') : '<span class="subtiel">Rust</span>'}</span></div>`;
+  }).join('');
+  const wijzigingen = S.vast.length ? S.vast.map(v => `
+    <div class="vergelijk"><span>${esc(v.wat)}<br><span class="subtiel klein">vanaf week ${v.vanaf}</span></span>
+      <button class="knop klein" data-actie="vast-terug" data-id="${v.id}">Terugdraaien</button></div>`).join('')
+    : '<p class="subtiel">Nog geen wijzigingen. Je volgt het originele schema.</p>';
+  openSheet('Vaste weekindeling', `
+    <p class="subtiel">Zo ziet week ${cal} eruit, met je vaste wijzigingen erin.</p>
+    ${dagen}
+    <button class="knop primair breed mt" data-actie="vast-kracht-nieuw" data-cal="${cal}">➕ Krachttraining toevoegen aan vaste indeling</button>
+    <h3 class="mt">Jouw wijzigingen</h3>
+    ${wijzigingen}
+    <p class="subtiel klein mt">Een krachttraining in je vaste indeling wijzigen of verwijderen? Tik in Week op de training, kies Bewerken of Verwijderen en daarna "Vaste indeling".</p>`);
+}
+
+function vastTerug(id) {
+  S.vast = S.vast.filter(v => v.id !== id);
+  bewaar();
+  render();
+  openVasteIndeling();
+  toast('Wijziging teruggedraaid');
 }
 
 function extraVerwijder(key) {
@@ -1559,6 +1739,14 @@ const ACTIES = {
   'extra-nieuw': el => openExtra(+el.dataset.cal),
   'extra-opslaan': el => extraOpslaan(+el.dataset.cal, !!el.dataset.bevestigd),
   'extra-verwijder': el => extraVerwijder(el.dataset.key),
+  verwijder: el => openVerwijder(el.dataset.key),
+  'verwijder-week': el => verwijderWeek(el.dataset.key),
+  'verwijder-vast': el => verwijderVast(el.dataset.key),
+  'herstel-verwijderd': el => herstelVerwijderd(+el.dataset.cal),
+  'vaste-indeling': () => openVasteIndeling(),
+  'vast-terug': el => vastTerug(+el.dataset.id),
+  'vast-kracht-nieuw': el => openExtra(+el.dataset.cal, { kracht: true, vast: true }),
+  'kies-scope': el => el.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('aan', b === el)),
   herhaal: el => openHerhaal(+el.dataset.cal, el.dataset.x ? +el.dataset.x : null),
   'herhaal-kies': el => openHerhaalVoorbeeld(+el.dataset.cal, +el.dataset.x, +el.dataset.v),
   'herhaal-bevestig': el => herhaalBevestig(+el.dataset.cal, +el.dataset.x, +el.dataset.v),
@@ -1617,6 +1805,11 @@ document.addEventListener('click', e => {
 });
 
 document.addEventListener('change', e => {
+  if (e.target.id === 'xType') extraTypeGewijzigd();
+  if (e.target.id === 'bSoort') {
+    $('#bEigenVeld').hidden = e.target.value !== 'eigen';
+    $('#bStappen').value = KRACHT_SOORTEN[e.target.value].stappen.join('\n');
+  }
   if (e.target.id === 'importBestand' && e.target.files[0]) {
     importeer(e.target.files[0]);
     e.target.value = '';

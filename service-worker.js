@@ -1,7 +1,7 @@
 /* service-worker.js — zorgt dat de app ook zonder internet werkt.
    Pas je later bestanden aan? Verhoog dan het versienummer hieronder
    (bijv. 'hyrox-v2'), dan haalt de iPhone alles opnieuw op. */
-const CACHE = 'hyrox-v1';
+const CACHE = 'hyrox-v2';
 const BESTANDEN = [
   './',
   './index.html',
